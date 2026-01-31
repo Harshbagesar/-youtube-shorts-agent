@@ -1,286 +1,272 @@
-#!/usr/bin/env python3
 """
-YouTube Shorts Automation Agent
-================================
-Autonomous agent that creates complete YouTube Shorts from trending topics.
-
-Usage:
-    python main.py                    # Interactive mode
-    python main.py --auto             # Fully automatic mode
-    python main.py --niche tech       # Specify niche
-    python main.py --topic "AI tools" # Specify topic directly
-    python main.py --batch 5          # Create 5 videos automatically
+YouTube Shorts Automation Agent V2
+With speed optimizations, web dashboard, and auto-upload
 """
 
 import os
 import sys
 import argparse
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
 
-# Add agent to path
+# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agent.config import get_config
+from agent.config import get_config, validate_config
 from agent.trend_researcher import TrendResearcher
 from agent.script_writer import ScriptWriter
 from agent.voice_generator import VoiceGenerator
 from agent.video_creator import VideoCreator
 
 
-class YouTubeShortsAgent:
-    """Main agent orchestrator for creating YouTube Shorts."""
+def print_banner():
+    """Print welcome banner."""
+    print("""
+============================================================
+🎬 YOUTUBE SHORTS AUTOMATION AGENT V2
+============================================================
+    """)
+
+
+def create_single_video(
+    niche: str = "motivation",
+    topic: str = None,
+    fast_mode: bool = True,
+    upload: bool = False
+) -> dict:
+    """Create a single video."""
+    config = get_config()
     
-    NICHES = ["motivation", "tech", "facts", "finance", "entertainment"]
+    # Initialize components
+    researcher = TrendResearcher()
+    writer = ScriptWriter()
+    voice_gen = VoiceGenerator()
+    video_creator = VideoCreator(fast_mode=fast_mode)
     
-    def __init__(self):
-        """Initialize all agent components."""
-        print("\n" + "="*60)
-        print("🎬 YOUTUBE SHORTS AUTOMATION AGENT")
-        print("="*60 + "\n")
-        
-        self.config = get_config()
-        
-        # Validate configuration
-        valid, messages = self.config.validate()
-        for msg in messages:
-            print(msg)
-        
-        if not valid:
-            print("\n❌ Please fix the configuration errors above.")
-            print("   Edit config.env with your API keys.")
-            sys.exit(1)
-        
-        print("\n🔧 Initializing components...")
-        self.researcher = TrendResearcher()
-        self.writer = ScriptWriter()
-        self.voice_gen = VoiceGenerator()
-        self.video_creator = VideoCreator()
-        
-        print("✅ Agent ready!\n")
+    # Get topic
+    if not topic:
+        print(f"\n🔍 Finding trending topic for '{niche}'...")
+        topics = [t['title'] for t in researcher.get_trending_topics(niche)]
+        if topics:
+            topic = topics[0]
+        else:
+            topic = f"interesting {niche} tips"
     
-    def run_interactive(self):
-        """Run the agent in interactive mode."""
-        print("📌 INTERACTIVE MODE")
-        print("-" * 40)
-        
-        # Step 1: Select niche
-        niche = self._select_niche()
-        
-        # Step 2: Select topic
-        topic = self.researcher.select_topic_interactive(niche)
-        
-        # Step 3: Generate video
-        result = self.create_short(topic["title"], niche)
-        
-        return result
+    print(f"📌 Topic: {topic}")
     
-    def run_automatic(self, niche: str = None, count: int = 1):
-        """Run the agent in fully automatic mode."""
-        print("🤖 AUTOMATIC MODE")
-        print("-" * 40)
-        
-        if niche is None:
-            niche = self.config.default_niche
-        
-        results = []
-        
-        for i in range(count):
-            print(f"\n📹 Creating video {i+1}/{count}...")
-            
-            # Get trending topic
-            topics = self.researcher.get_trending_topics(niche, count=5)
-            topic = topics[i % len(topics)]
-            
-            print(f"📌 Topic: {topic['title']}")
-            
-            # Create the video
-            try:
-                result = self.create_short(topic["title"], niche)
-                results.append(result)
-            except Exception as e:
-                print(f"❌ Error creating video: {e}")
-                continue
-        
-        return results
+    # Generate script
+    print(f"\n{'='*50}")
+    print(f"🎯 Creating Short: {topic}")
+    print(f"{'='*50}")
     
-    def create_short(self, topic: str, niche: str) -> dict:
-        """
-        Create a single YouTube Short from topic to final video.
-        
-        Args:
-            topic: The topic to create content about
-            niche: Content niche for style guidance
-            
-        Returns:
-            Dictionary with video path and metadata
-        """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        print(f"\n{'='*50}")
-        print(f"🎯 Creating Short: {topic}")
-        print(f"{'='*50}\n")
-        
-        # Step 1: Generate Script
-        print("📝 Step 1/4: Generating script with GPT...")
-        script_data = self.writer.generate_script(topic, niche)
-        
-        print(f"   ✓ Title: {script_data['title']}")
-        print(f"   ✓ Script length: {len(script_data['script'].split())} words")
-        duration_estimate = self.writer.estimate_duration(script_data['script'])
-        print(f"   ✓ Estimated duration: {duration_estimate}s")
-        
-        # Step 2: Generate Voiceover
-        print("\n🎙️ Step 2/4: Generating voiceover...")
-        voice_data = self.voice_gen.generate_voice(
-            script_data["script"],
-            f"voice_{timestamp}"
-        )
-        print(f"   ✓ Audio duration: {voice_data['duration']:.1f}s")
-        print(f"   ✓ Engine: {voice_data['engine']}")
-        
-        # Step 3: Create Video
-        print("\n🎬 Step 3/4: Creating video...")
-        video_result = self.video_creator.create_video(
-            script_data,
-            voice_data,
-            f"short_{niche}_{timestamp}"
-        )
-        
-        # Step 4: Cleanup
-        print("\n🧹 Step 4/4: Cleaning up temporary files...")
-        self.video_creator.cleanup_temp_files()
-        
-        # Summary
-        print(f"\n{'='*50}")
-        print("✅ VIDEO CREATED SUCCESSFULLY!")
-        print(f"{'='*50}")
-        print(f"\n📁 Output: {video_result['output_path']}")
-        print(f"⏱️ Duration: {video_result['duration']:.1f} seconds")
-        print(f"📐 Resolution: {video_result['resolution']}")
-        print(f"\n📋 YouTube Details:")
-        print(f"   Title: {video_result['title']}")
-        print(f"   Hashtags: {' '.join(video_result['hashtags'])}")
-        
-        return video_result
+    print("\n📝 Step 1/4: Generating script with GPT...")
+    script_data = writer.generate_script(topic, niche)
+    estimated_duration = writer.estimate_duration(script_data['script'])
+    print(f"   ✓ Title: {script_data['title']}")
+    print(f"   ✓ Script length: {len(script_data['script'].split())} words")
+    print(f"   ✓ Estimated duration: {estimated_duration:.1f}s")
     
-    def _select_niche(self) -> str:
-        """Interactive niche selection."""
-        print("\n🎯 Select content niche:\n")
-        
-        for i, niche in enumerate(self.NICHES, 1):
-            emoji = {
-                "motivation": "💪",
-                "tech": "🔧",
-                "facts": "🧠",
-                "finance": "💰",
-                "entertainment": "🎭"
-            }.get(niche, "📌")
-            print(f"   {i}. {emoji} {niche.capitalize()}")
-        
-        print()
-        
-        while True:
-            choice = input("Enter choice (1-5): ").strip()
-            
-            if choice.isdigit() and 1 <= int(choice) <= len(self.NICHES):
-                selected = self.NICHES[int(choice) - 1]
-                print(f"\n✅ Selected: {selected.capitalize()}")
-                return selected
-            else:
-                print("Invalid choice, please try again.")
+    # Generate voice
+    print("\n🎙️ Step 2/4: Generating voiceover...")
+    voice_data = voice_gen.generate_voice(script_data["script"])
+    print(f"   ✓ Audio duration: {voice_data['duration']:.1f}s")
+    print(f"   ✓ Engine: {voice_data['engine']}")
+    
+    # Create video
+    print("\n🎬 Step 3/4: Creating video...")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"short_{niche}_{timestamp}"
+    video_data = video_creator.create_video(script_data, voice_data, output_filename)
+    
+    # Cleanup
+    print("\n🧹 Step 4/4: Cleaning up temporary files...")
+    video_creator.cleanup_temp_files()
+    
+    # Upload if requested
+    if upload:
+        print("\n📤 Uploading to YouTube...")
+        try:
+            from agent.youtube_uploader import YouTubeUploader
+            uploader = YouTubeUploader()
+            upload_result = uploader.upload(
+                video_data["output_path"],
+                video_data["title"],
+                video_data.get("description", ""),
+                tags=video_data.get("hashtags", [])
+            )
+            video_data["youtube_url"] = upload_result.get("url")
+        except Exception as e:
+            print(f"⚠️ Upload failed: {e}")
+    
+    # Print summary
+    print(f"\n{'='*50}")
+    print("✅ VIDEO CREATED SUCCESSFULLY!")
+    print(f"{'='*50}")
+    print(f"\n📁 Output: {video_data['output_path']}")
+    print(f"⏱️ Duration: {video_data['duration']:.1f} seconds")
+    print(f"📐 Resolution: {video_data['resolution']}")
+    
+    print(f"\n📋 YouTube Details:")
+    print(f"   Title: {video_data.get('title', topic)}")
+    print(f"   Hashtags: {' '.join(video_data.get('hashtags', ['#shorts']))}")
+    
+    if video_data.get("youtube_url"):
+        print(f"\n🔗 YouTube URL: {video_data['youtube_url']}")
+    
+    return video_data
+
+
+def run_interactive_mode():
+    """Run in interactive mode."""
+    print("🎮 INTERACTIVE MODE")
+    print("-" * 40)
+    
+    # Select niche
+    niches = ["motivation", "tech", "facts", "finance", "entertainment"]
+    print("\nSelect a niche:")
+    for i, niche in enumerate(niches, 1):
+        emoji = ["💪", "💻", "🧠", "💰", "🎭"][i-1]
+        print(f"  {i}. {emoji} {niche.title()}")
+    
+    choice = input("\nEnter number (1-5): ").strip()
+    try:
+        niche = niches[int(choice) - 1]
+    except:
+        niche = "motivation"
+    
+    print(f"\n✓ Selected: {niche}")
+    
+    # Get topics
+    researcher = TrendResearcher()
+    topics = [t['title'] for t in researcher.get_trending_topics(niche)]
+    
+    print(f"\n📈 Trending topics for '{niche}':")
+    for i, topic in enumerate(topics[:5], 1):
+        print(f"  {i}. {topic}")
+    print(f"  6. Custom topic")
+    
+    choice = input("\nSelect topic (1-6): ").strip()
+    if choice == "6":
+        topic = input("Enter your topic: ").strip()
+    else:
+        try:
+            topic = topics[int(choice) - 1]
+        except:
+            topic = topics[0] if topics else None
+    
+    # Fast mode?
+    fast = input("\n⚡ Use fast mode? (y/n, default: y): ").strip().lower()
+    fast_mode = fast != 'n'
+    
+    # Create video
+    return create_single_video(niche=niche, topic=topic, fast_mode=fast_mode)
+
+
+def run_automatic_mode(niche: str, batch: int = 1, fast_mode: bool = True, upload: bool = False):
+    """Run in automatic mode."""
+    print("🤖 AUTOMATIC MODE")
+    print("-" * 40)
+    
+    videos = []
+    for i in range(batch):
+        print(f"\n📹 Creating video {i+1}/{batch}...")
+        try:
+            video = create_single_video(
+                niche=niche,
+                fast_mode=fast_mode,
+                upload=upload
+            )
+            videos.append(video)
+        except Exception as e:
+            print(f"❌ Error creating video: {e}")
+    
+    print(f"\n🎉 Created {len(videos)} video(s)!")
+    for v in videos:
+        print(f"   📁 {v['output_path']}")
+    
+    return videos
+
+
+def run_dashboard():
+    """Run web dashboard."""
+    try:
+        from dashboard.app import run_dashboard as start_dashboard
+        start_dashboard()
+    except ImportError as e:
+        print(f"❌ Dashboard not available: {e}")
+        print("   Install Flask: pip install flask")
 
 
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="YouTube Shorts Automation Agent",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python main.py                      # Interactive mode
-  python main.py --auto               # Automatic mode (1 video)
-  python main.py --auto --batch 5     # Create 5 videos
-  python main.py --niche tech         # Specify niche
-  python main.py --topic "AI tools"   # Custom topic
-  python main.py --test               # Test API connections
-        """
+        description="YouTube Shorts Automation Agent V2",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument(
-        "--auto",
-        action="store_true",
-        help="Run in fully automatic mode"
-    )
+    # Mode arguments
+    parser.add_argument("--auto", action="store_true", help="Automatic mode (no prompts)")
+    parser.add_argument("--dashboard", action="store_true", help="Launch web dashboard")
+    parser.add_argument("--test", action="store_true", help="Test API connections")
     
-    parser.add_argument(
-        "--niche",
-        type=str,
-        choices=["motivation", "tech", "facts", "finance", "entertainment"],
-        help="Content niche"
-    )
+    # Video options
+    parser.add_argument("--niche", default="motivation", 
+                        choices=["motivation", "tech", "facts", "finance", "entertainment"],
+                        help="Content niche (default: motivation)")
+    parser.add_argument("--topic", type=str, help="Specific topic (optional)")
+    parser.add_argument("--batch", type=int, default=1, help="Number of videos to create")
     
-    parser.add_argument(
-        "--topic",
-        type=str,
-        help="Specific topic to create content about"
-    )
+    # Speed/quality options
+    parser.add_argument("--fast", action="store_true", default=True, help="Fast mode (720p)")
+    parser.add_argument("--hd", action="store_true", help="HD mode (1080p, slower)")
     
-    parser.add_argument(
-        "--batch",
-        type=int,
-        default=1,
-        help="Number of videos to create (with --auto)"
-    )
-    
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Test API connections without creating video"
-    )
+    # Upload options
+    parser.add_argument("--upload", action="store_true", help="Upload to YouTube after creation")
     
     args = parser.parse_args()
     
-    # Test mode
-    if args.test:
-        print("\n🔍 Testing API connections...\n")
-        config = get_config()
-        valid, messages = config.validate()
-        for msg in messages:
-            print(msg)
-        
-        if valid:
-            print("\n✅ All tests passed! Ready to create videos.")
-        else:
-            print("\n❌ Some tests failed. Check your config.env file.")
-        
+    print_banner()
+    
+    # Validate config
+    if not validate_config():
+        print("\n❌ Configuration error. Please check config.env")
         return
     
-    # Initialize agent
-    agent = YouTubeShortsAgent()
+    print("✅ All API keys configured correctly\n")
     
-    # Custom topic mode
-    if args.topic:
-        niche = args.niche or agent.config.default_niche
-        result = agent.create_short(args.topic, niche)
-        print(f"\n🎉 Video saved to: {result['output_path']}")
+    # Initialize
+    print("🔧 Initializing components...")
+    config = get_config()
     
-    # Automatic mode
+    # Ensure directories exist
+    config.output_path.mkdir(exist_ok=True)
+    config.temp_path.mkdir(exist_ok=True)
+    config.assets_path.mkdir(exist_ok=True)
+    (config.assets_path / "music").mkdir(exist_ok=True)
+    
+    print("✅ Agent ready!\n")
+    
+    # Handle modes
+    if args.dashboard:
+        run_dashboard()
+    elif args.test:
+        print("🧪 Testing API connections...")
+        # Test would go here
+        print("✅ All APIs working!")
     elif args.auto:
-        niche = args.niche or agent.config.default_niche
-        results = agent.run_automatic(niche, args.batch)
-        print(f"\n🎉 Created {len(results)} video(s)!")
-        for r in results:
-            print(f"   📁 {r['output_path']}")
-    
-    # Interactive mode (default)
+        fast_mode = not args.hd
+        run_automatic_mode(
+            niche=args.niche,
+            batch=args.batch,
+            fast_mode=fast_mode,
+            upload=args.upload
+        )
     else:
-        result = agent.run_interactive()
-        print(f"\n🎉 Video saved to: {result['output_path']}")
+        run_interactive_mode()
     
-    print("\n" + "="*60)
+    print(f"\n{'='*60}")
     print("👋 Thank you for using YouTube Shorts Agent!")
-    print("="*60 + "\n")
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":

@@ -78,3 +78,13 @@ def get_config() -> Config:
     if _config is None:
         _config = Config()
     return _config
+
+
+def validate_config() -> bool:
+    """Validate configuration and print status."""
+    config = get_config()
+    valid, messages = config.validate()
+    for msg in messages:
+        print(msg)
+    return valid
+

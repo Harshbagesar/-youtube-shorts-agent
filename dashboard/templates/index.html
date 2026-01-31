@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Shorts Agent</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🎬 YouTube Shorts Agent</h1>
+            <p class="subtitle">Create viral Shorts automatically</p>
+        </header>
+
+        <!-- Status Panel -->
+        <div class="status-panel" id="statusPanel">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <span id="statusText">Ready</span>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Create Video Card -->
+            <div class="card">
+                <h2>📹 Create New Video</h2>
+                
+                <div class="form-group">
+                    <label>Niche</label>
+                    <select id="nicheSelect">
+                        <option value="motivation">💪 Motivation</option>
+                        <option value="tech">💻 Tech</option>
+                        <option value="facts">🧠 Facts</option>
+                        <option value="finance">💰 Finance</option>
+                        <option value="entertainment">🎭 Entertainment</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Topic (optional)</label>
+                    <input type="text" id="topicInput" placeholder="Leave empty for trending topics">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="fastMode" checked>
+                        ⚡ Fast Mode (720p, faster encoding)
+                    </label>
+                </div>
+
+                <button class="btn-primary" id="createBtn" onclick="createVideo()">
+                    🚀 Create Video
+                </button>
+            </div>
+
+            <!-- Trending Topics -->
+            <div class="card">
+                <h2>📈 Trending Topics</h2>
+                <div id="topicsList" class="topics-list">
+                    <p class="hint">Select a niche to see trending topics</p>
+                </div>
+            </div>
+
+            <!-- History -->
+            <div class="card">
+                <h2>📁 Recent Videos</h2>
+                <div id="historyList" class="history-list">
+                    <p class="hint">No videos created yet</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Last Created Video -->
+        <div class="card video-preview" id="videoPreview" style="display: none;">
+            <h2>✅ Latest Video</h2>
+            <video id="videoPlayer" controls></video>
+            <div class="video-info" id="videoInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        // Poll status every second while running
+        let statusInterval = null;
+
+        async function checkStatus() {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+            
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const progressFill = document.getElementById('progressFill');
+            const createBtn = document.getElementById('createBtn');
+            
+            if (data.is_running) {
+                indicator.className = 'status-indicator running';
+                statusText.textContent = data.current_step;
+                progressFill.style.width = data.progress + '%';
+                createBtn.disabled = true;
+                createBtn.textContent = '⏳ Creating...';
+            } else {
+                indicator.className = 'status-indicator ready';
+                statusText.textContent = data.current_step || 'Ready';
+                progressFill.style.width = data.progress + '%';
+                createBtn.disabled = false;
+                createBtn.textContent = '🚀 Create Video';
+                
+                if (data.last_video) {
+                    showVideo(data.last_video);
+                }
+                
+                // Stop polling
+                if (statusInterval) {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                    loadHistory();
+                }
+            }
+        }
+
+        async function createVideo() {
+            const niche = document.getElementById('nicheSelect').value;
+            const topic = document.getElementById('topicInput').value;
+            const fastMode = document.getElementById('fastMode').checked;
+            
+            const res = await fetch('/api/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ niche, topic, fast_mode: fastMode })
+            });
+            
+            if (res.ok) {
+                // Start polling
+                statusInterval = setInterval(checkStatus, 1000);
+                checkStatus();
+            }
+        }
+
+        async function loadTopics() {
+            const niche = document.getElementById('nicheSelect').value;
+            const res = await fetch('/api/topics/' + niche);
+            const data = await res.json();
+            
+            const list = document.getElementById('topicsList');
+            if (data.topics && data.topics.length > 0) {
+                list.innerHTML = data.topics.map(t => 
+                    `<div class="topic-item" onclick="selectTopic('${t}')">${t}</div>`
+                ).join('');
+            } else {
+                list.innerHTML = '<p class="hint">No trending topics found</p>';
+            }
+        }
+
+        function selectTopic(topic) {
+            document.getElementById('topicInput').value = topic;
+        }
+
+        function showVideo(videoData) {
+            const preview = document.getElementById('videoPreview');
+            const player = document.getElementById('videoPlayer');
+            const info = document.getElementById('videoInfo');
+            
+            const filename = videoData.output_path.split('/').pop();
+            player.src = '/api/videos/' + filename;
+            
+            info.innerHTML = `
+                <p><strong>Title:</strong> ${videoData.title}</p>
+                <p><strong>Duration:</strong> ${videoData.duration.toFixed(1)}s</p>
+                <p><strong>Resolution:</strong> ${videoData.resolution}</p>
+            `;
+            
+            preview.style.display = 'block';
+        }
+
+        async function loadHistory() {
+            const res = await fetch('/api/history');
+            const data = await res.json();
+            
+            const list = document.getElementById('historyList');
+            if (data.history && data.history.length > 0) {
+                list.innerHTML = data.history.map(h => `
+                    <div class="history-item">
+                        <span class="history-title">${h.title}</span>
+                        <span class="history-niche">${h.niche}</span>
+                        <span class="history-duration">${h.duration.toFixed(1)}s</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Init
+        document.getElementById('nicheSelect').addEventListener('change', loadTopics);
+        loadTopics();
+        loadHistory();
+        checkStatus();
+    </script>
+</body>
+</html>
