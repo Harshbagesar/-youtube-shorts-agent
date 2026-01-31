@@ -1,0 +1,25 @@
+# YouTube Shorts Agent Dependencies
+# ==================================
+
+# OpenAI GPT API
+openai>=1.0.0
+
+# Video Processing
+moviepy>=1.0.3
+Pillow>=10.0.0
+
+# Text-to-Speech
+gTTS>=2.3.0
+pydub>=0.25.1
+
+# Stock Footage API
+requests>=2.31.0
+
+# Google Trends (for trending topics)
+pytrends>=4.9.0
+
+# Environment & Config
+python-dotenv>=1.0.0
+
+# Audio Processing (required by pydub)
+# Note: Also requires ffmpeg installed on system

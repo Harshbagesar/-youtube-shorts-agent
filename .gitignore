@@ -1,0 +1,36 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# API Keys & Secrets
+config.env
+.env
+*.env
+
+# Temporary Files
+temp/
+*.mp3
+*.wav
+
+# Output Videos (too large for git)
+output/*.mp4
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
